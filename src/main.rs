@@ -45,7 +45,7 @@ impl mmv_metric_t {
 const PRODUCTS_COUNT: usize = 3;
 const CLUSTER_ID: i32 = 321;
 const PRODUCTS_INDOM: u32 = 61;
-const MMV_FLAGS: mmv_stats_flags_t = mmv_stats_flags_t::MMV_FLAG_PROCESS;
+const MMV_FLAGS: mmv_stats_flags_t = 0;
 
 pub fn main() {
     unsafe {

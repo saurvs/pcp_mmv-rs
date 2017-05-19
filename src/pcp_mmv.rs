@@ -9502,13 +9502,10 @@ impl Clone for mmv_metric2 {
     fn clone(&self) -> Self { *self }
 }
 pub type mmv_metric2_t = mmv_metric2;
-#[repr(u32)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub enum mmv_stats_flags {
-    MMV_FLAG_NOPREFIX = 1,
-    MMV_FLAG_PROCESS = 2,
-    MMV_FLAG_SENTINEL = 4,
-}
+pub const mmv_stats_flags_MMV_FLAG_NOPREFIX: mmv_stats_flags = 1;
+pub const mmv_stats_flags_MMV_FLAG_PROCESS: mmv_stats_flags = 2;
+pub const mmv_stats_flags_MMV_FLAG_SENTINEL: mmv_stats_flags = 4;
+pub type mmv_stats_flags = ::std::os::raw::c_uint;
 pub use self::mmv_stats_flags as mmv_stats_flags_t;
 extern "C" {
     pub fn mmv_stats_init(arg1: *const ::std::os::raw::c_char,
