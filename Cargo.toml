@@ -1,0 +1,8 @@
+[package]
+name = "acme"
+version = "0.1.0"
+authors = ["Saurav Sachidanand <sauravsachidanand@gmail.com>"]
+build = "build.rs"
+
+[dependencies]
+rand = "0.3.15"
