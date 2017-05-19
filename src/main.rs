@@ -13,7 +13,7 @@ use std::mem;
 use std::thread;
 use std::time::Duration;
 
-fn array_from_cstring(cstring: &CString) -> [i8; 64] {
+fn array64bytes_from_cstring(cstring: &CString) -> [i8; 64] {
     let mut array = [0i8; 64];
     for (i, chr) in cstring.as_bytes_with_nul().iter().enumerate() {
         array[i] = *chr as i8;
@@ -30,7 +30,7 @@ impl mmv_metric_t {
         let shorttext = CString::new(shorttext).unwrap();
         let helptext = CString::new(helptext).unwrap();
         mmv_metric_t {
-            name: array_from_cstring(name),
+            name: array64bytes_from_cstring(name),
             item: item,
             type_: type_,
             semantics: semantics,
@@ -60,9 +60,9 @@ pub fn main() {
         let product_external_3 = CString::new("Giant_Rubber_Bands").unwrap();
 
         let mut products: [mmv_instances_t; PRODUCTS_COUNT] = [
-            mmv_instances_t { internal: 0, external: array_from_cstring(&product_external_1) },
-            mmv_instances_t { internal: 1, external: array_from_cstring(&product_external_2) },
-            mmv_instances_t { internal: 2, external: array_from_cstring(&product_external_3) },
+            mmv_instances_t { internal: 0, external: array64bytes_from_cstring(&product_external_1) },
+            mmv_instances_t { internal: 1, external: array64bytes_from_cstring(&product_external_2) },
+            mmv_instances_t { internal: 2, external: array64bytes_from_cstring(&product_external_3) },
         ];
 
         let indom_shorttext = CString::new("Acme products").unwrap();
