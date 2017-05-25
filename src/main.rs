@@ -15,10 +15,10 @@ use std::time::Duration;
 
 fn array64bytes_from_cstring(cstring: &CString) -> [i8; 64] {
     let mut array = [0i8; 64];
-    for (i, chr) in cstring.as_bytes_with_nul().iter().enumerate() {
-        array[i] = *chr as i8;
+    for (byte, chr) in array.iter_mut().zip(cstring.as_bytes_with_nul().iter()) {
+        *byte = *chr as i8; 
     }
-    array
+    array 
 }
 
 impl mmv_metric_t {
