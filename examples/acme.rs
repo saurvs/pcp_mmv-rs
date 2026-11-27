@@ -1,136 +1,106 @@
-extern crate pcp_mmv;
-extern crate rand;
+//! A port of PCP's Acme example (src/pmdas/mmv/acme.c).
+//!
+//! Usage: `cargo run --example acme [ITERATIONS]`
+//!
+//! Writes `$PCP_TMP_DIR/mmv/acme` and updates it until `ITERATIONS`
+//! products have been built (forever by default).
 
-use pcp_mmv::*;
-use rand::random;
+use pcp_mmv::{
+    Flags, Indom, Instance, Metric, MetricSem, MetricType, Mmv, PM_COUNT_ONE, PM_TIME_USEC, Units,
+};
+use std::env;
 use std::thread;
 use std::time::Duration;
 
-const PRODUCTS_COUNT: usize = 3;
-const CLUSTER_ID: i32 = 321;
+const CLUSTER_ID: u32 = 321;
 const PRODUCTS_INDOM: u32 = 61;
-const MMV_FLAGS: u32 = 0;
+const PRODUCTS: [&str; 3] = ["Anvils", "Rockets", "Giant_Rubber_Bands"];
 
-pub fn main() {
+fn main() -> std::io::Result<()> {
+    let iterations: Option<u64> = env::args()
+        .nth(1)
+        .map(|n| n.parse().expect("ITERATIONS must be a number"));
 
-    /*
-     * create indom
-     */
-
-    let products = [
-        "Anvils",
-        "Rockets",
-        "Giant_Rubber_Bands"
-    ];
-
-    let mut instances = [
-        Instance::new(0, products[0]),
-        Instance::new(1, products[1]),
-        Instance::new(2, products[2]),
-    ];
-
+    let instances: Vec<Instance> = PRODUCTS
+        .iter()
+        .zip(0..)
+        .map(|(product, id)| Instance::new(id, product))
+        .collect();
     let indom = Indom::new(
-        PRODUCTS_INDOM, // serial
-        &mut instances,
+        PRODUCTS_INDOM,
+        &instances,
         "Acme products",
-        "Most popular products produced by the Acme Corporation"
-    );
-    
-    /*
-     * create count metric
-     */
-    
-    let count_metric_name = "products.count";
-
-    let mut count_dimension = PMUnits::new();
-    count_dimension.set_dimCount(1);
-    count_dimension.set_scaleCount(PM_COUNT_ONE as i32);
-
-    let count_metric = Metric::new(
-        count_metric_name, // name
-        7, // item
-        MetricType::MMV_TYPE_U64,
-        MetricSem::MMV_SEM_COUNTER,
-        count_dimension,
-        PRODUCTS_INDOM,
-        "Acme factory product throughput",
-        "Monotonic increasing counter of products produced in the Acme Corporation\nfactory since starting the Acme production application. Quality guaranteed."
+        "Most popular products produced by the Acme Corporation",
     );
 
-    /*
-     * create time metric
-     */
+    let microseconds = Units::new(0, 1, 0, 0, PM_TIME_USEC, 0);
+    let metrics = [
+        Metric::new(
+            "products.count",
+            7,
+            MetricType::U64,
+            MetricSem::Counter,
+            Units::new(0, 0, 1, 0, 0, PM_COUNT_ONE),
+            PRODUCTS_INDOM,
+            "Acme factory product throughput",
+            "Monotonic increasing counter of products produced in the Acme Corporation\n\
+             factory since starting the Acme production application.  Quality guaranteed.",
+        ),
+        Metric::new(
+            "products.time",
+            8,
+            MetricType::U64,
+            MetricSem::Counter,
+            microseconds,
+            PRODUCTS_INDOM,
+            "Machine time spent producing Acme products",
+            "Machine time spent producing Acme Corporation products.  Does not include\n\
+             time in queues waiting for production machinery.",
+        ),
+        Metric::new(
+            "products.queuetime",
+            10,
+            MetricType::U64,
+            MetricSem::Counter,
+            microseconds,
+            PRODUCTS_INDOM,
+            "Queued time while producing Acme products",
+            "Time spent in the queue waiting to build Acme Corporation products,\n\
+             while some other Acme product was being built instead of this one.",
+        ),
+    ];
 
-    let time_metric_name = "products.time";
+    let mmv = Mmv::start("acme", CLUSTER_ID, Flags::empty(), &metrics, &[indom])?;
 
-    let mut time_dimension = PMUnits::new();
-    time_dimension.set_dimTime(1);
-    time_dimension.set_scaleTime(PM_TIME_USEC);
+    let lookup = |metric| {
+        PRODUCTS.map(|product| {
+            mmv.lookup_value(metric, Some(product))
+                .expect("value exists")
+        })
+    };
+    let count = lookup("products.count");
+    let machine = lookup("products.time");
+    let inqueue = lookup("products.queuetime");
 
-    let time_metric = Metric::new(
-        time_metric_name, // name
-        8, // item
-        MetricType::MMV_TYPE_U64,
-        MetricSem::MMV_SEM_COUNTER,
-        time_dimension,
-        PRODUCTS_INDOM,
-        "Machine time spent producing Acme products",
-        "Machine time spent producing Acme Corporation products.  Does not include\ntime in queues waiting for production machinery."
-    );
+    let mut built = 0;
+    while iterations.is_none_or(|n| built < n) {
+        // Choose a product and pretend to work on it for up to 50ms.
+        let product = rand::random_range(0..PRODUCTS.len());
+        let working: u64 = rand::random_range(0..50_000);
+        thread::sleep(Duration::from_micros(working));
 
-    /*
-     * create queue metric
-     */
-
-    let queue_metric_name = "products.queuetime";
-
-    let queue_metric = Metric::new(
-        queue_metric_name, // name
-        10, // item
-        MetricType::MMV_TYPE_U64,
-        MetricSem::MMV_SEM_COUNTER,
-        time_dimension, // reuse time_dimension
-        PRODUCTS_INDOM,
-        "Queued time while producing Acme products",
-        "Time spent in the queue waiting to build Acme Corporation products,\nwhile some other Acme product was being built instead of this one."
-    );
-
-    /*
-     * start mmv
-     */
-
-    let metrics = [count_metric, time_metric, queue_metric];
-    let indoms = [indom];
-    let mut mmv = MMV::new();
-
-    mmv.start("acme", CLUSTER_ID, MMV_FLAGS, &metrics, &indoms);
-
-    /*
-     * begin production!
-     */
-
-    let mut count = [AtomValue::new(); PRODUCTS_COUNT];
-    let mut machine = [AtomValue::new(); PRODUCTS_COUNT];
-    let mut inqueue = [AtomValue::new(); PRODUCTS_COUNT];
-
-    for (i, product) in products.iter().enumerate() {
-        count[i] = mmv.lookup_value(count_metric_name, product);
-        machine[i] = mmv.lookup_value(time_metric_name, product);
-        inqueue[i] = mmv.lookup_value(queue_metric_name, product);
-    }
-
-    loop {
-        let product = random::<usize>() % PRODUCTS_COUNT;
-        let working = random::<u64>() % 3;
-        thread::sleep(Duration::from_secs(working));
-
-        mmv.inc_value(&mut machine[product], 1.0);
+        // One more product built, using the libpcp_mmv API...
+        machine[product].inc(working as f64);
+        // ...or a direct update of the mapped value.
         count[product].inc_ull(1);
 
-        for i in 0..PRODUCTS_COUNT {
+        // Every other product was queued for this time.
+        for (i, value) in inqueue.iter().enumerate() {
             if i != product {
-                mmv.inc_value(&mut inqueue[i], working as f64);
+                value.inc(working as f64);
             }
         }
+        built += 1;
     }
+    Ok(())
 }
