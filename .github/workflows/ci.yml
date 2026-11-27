@@ -1,0 +1,76 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+  RUSTDOCFLAGS: -D warnings
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --check
+      - run: cargo clippy --all-targets
+      - run: cargo doc --no-deps
+
+  test:
+    name: Test (${{ matrix.os }}, Rust ${{ matrix.rust }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+        rust: [stable, "1.85"]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install PCP
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpcp3-dev libpcp-mmv1-dev pcp
+      - uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ matrix.rust }}
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test
+      - name: Run the examples and check their MMV files with mmvdump
+        if: matrix.rust == 'stable'
+        run: ci/check-examples.sh
+
+  bindings:
+    name: Bindings up to date (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install PCP headers and libclang
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libpcp3-dev libpcp-mmv1-dev libclang-dev
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install bindgen-cli
+        run: cargo install --locked bindgen-cli@0.73.2
+      - run: ./generate-bindings.sh
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: sys-${{ matrix.os }}
+          path: src/sys.rs
+      - name: Check that src/sys.rs matches the regenerated bindings
+        run: git diff --exit-code src/sys.rs
